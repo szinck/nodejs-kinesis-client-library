@@ -26,12 +26,17 @@ interface AbstractConsumerOpts {
   numRecords?: number
 }
 
+export interface KinesisMetrics {
+  MillisBehindLatest: number
+}
+
 export interface ProcessRecordsCallback {
   (err: any, checkpointSequenceNumber?: Boolean|string): void;
 }
 
 export interface ConsumerExtension {
   processRecords: (records: AWS.kinesis.Record[], callback: ProcessRecordsCallback) => void
+  metrics?: (metrics: KinesisMetrics, callback: (err?: any) => void) => void
   initialize?: (callback: (err?: any) => void) => void
   shutdown?: (callback: (err?: any) => void) => void
 }
@@ -57,6 +62,11 @@ export class AbstractConsumer {
   // If it is implemented, the callback must be called for processing to begin.
   public initialize (callback: (err?: Error) => void) {
     this.log('No initialize method defined, skipping')
+    callback()
+  }
+
+  // Called to pass the millisBehindLatest metric
+  public metrics (metrics: KinesisMetrics, callback: (err?: any) => void) {
     callback()
   }
 
@@ -242,7 +252,11 @@ export class AbstractConsumer {
       var lastSequenceNumber = _.pluck(data.Records, 'SequenceNumber').pop()
       _this.maxSequenceNumber = lastSequenceNumber || _this.maxSequenceNumber
 
-      _this._processRecords(data.Records, callback)
+      // Send metrics
+      _this.metrics({'MillisBehindLatest': data.MillisBehindLatest}, function() {
+        // Process data
+        _this._processRecords(data.Records, callback)
+      });
     })
   }
 
